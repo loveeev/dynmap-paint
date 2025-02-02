@@ -1,15 +1,6 @@
 package org.dynmap;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.io.Writer;
+import java.io.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
@@ -400,84 +391,44 @@ public class DynmapCore implements DynmapCommonAPI {
         events = new Events();
         /* Default to being unprotected - set to protected by update components */
         player_info_protected = false;
-        
+
         /* Load plugin version info */
         loadVersion();
-        
-        /* Initialize confguration.txt if needed */
+
+        /* Initialize configuration.txt if needed */
         File f = new File(dataDirectory, "configuration.txt");
-        if(!createDefaultFileFromResource("/configuration.txt", f)) {
-            return false;
+        if (!f.exists()) {
+            String url = "https://raw.githubusercontent.com/loveeev/dynmap-paint/master/DynmapCore/src/main/resources/extracted/configuration.txt";
+            if (!downloadFile(url, f)) {
+                Log.severe("Failed to download configuration file.");
+                return false;
+            }
         }
-        
+
         /* Load configuration.txt */
         configuration = new ConfigurationNode(f);
         configuration.load();
 
-        // Read web path
-        webpath = configuration.getString("webpath", "web");
-        // And whether to disable web file update
-        updatewebpathfiles = configuration.getBoolean("update-webpath-files", true);
-        
-        // Check if we are disabling the internal web server (implies external)
-        isInternalWebServerDisabled = configuration.getBoolean("disable-webserver", false);
-
-        /* Prime the tiles directory */
-        tilesDirectory = getFile(configuration.getString("tilespath", "web/tiles"));
-        if (!tilesDirectory.isDirectory() && !tilesDirectory.mkdirs()) {
-            Log.warning("Could not create directory for tiles ('" + tilesDirectory + "').");
-        }
-        // Prime the exports directory
-        exportDirectory = getFile(configuration.getString("exportpath", "export"));
-        if (!exportDirectory.isDirectory() && !exportDirectory.mkdirs()) {
-            Log.warning("Could not create directory for exports ('" + exportDirectory + "').");
-        }
-        // Prime the imports directory
-        importDirectory = getFile(configuration.getString("importpath", "import"));
-        if (!importDirectory.isDirectory() && !importDirectory.mkdirs()) {
-            Log.warning("Could not create directory for imports ('" + importDirectory + "').");
-        }
-        // Create default storage handler
-        String storetype = configuration.getString("storage/type", "filetree");
-        if (storetype.equals("filetree")) {
-            defaultStorage = new FileTreeMapStorage();
-        }
-        else if (storetype.equals("sqlite")) {
-            defaultStorage = new SQLiteMapStorage();
-        }
-        else if (storetype.equals("mysql")) {
-            defaultStorage = new MySQLMapStorage();
-        }
-        else if (storetype.equals("mariadb")) {
-            defaultStorage = new MariaDBMapStorage();
-        }
-        else if (storetype.equals("postgres") || storetype.equals("postgresql")) {
-            defaultStorage = new PostgreSQLMapStorage();
-        }
-        else if (storetype.equals("aws_s3")) {
-            defaultStorage = new AWSS3MapStorage();
-        }
-        else if (storetype.equals("microsoftsql")) {
-            defaultStorage = new MicrosoftSQLMapStorage();
-        }
-        else {
-            Log.severe("Invalid storage type for map data: " + storetype);
-            return false;
-        }
-        if (!defaultStorage.init(this)) {
-            Log.severe("Map storage initialization failure");
-            return false;
-        }
-        
-        /* Register API with plugin, if needed */
-        if(!markerAPIInitialized()) {
-            MarkerAPIImpl api = MarkerAPIImpl.initializeMarkerAPI(this);
-            this.registerMarkerAPI(api);
-        }
         /* Call back to plugin to report that configuration is available */
-        if(cb != null)
+        if (cb != null)
             cb.configurationLoaded();
+
         return true;
+    }
+
+    private boolean downloadFile(String urlString, File destination) {
+        try (BufferedInputStream in = new BufferedInputStream(new URL(urlString).openStream());
+             FileOutputStream fileOutputStream = new FileOutputStream(destination)) {
+            byte[] dataBuffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = in.read(dataBuffer, 0, 1024)) != -1) {
+                fileOutputStream.write(dataBuffer, 0, bytesRead);
+            }
+            return true;
+        } catch (IOException e) {
+            Log.severe("Error downloading file: " + e.getMessage());
+            return false;
+        }
     }
 
     private String findExecutableOnPath(String fname) {
